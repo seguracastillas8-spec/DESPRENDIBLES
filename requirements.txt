@@ -1,6 +1,6 @@
-Flask
+flask
 pytesseract
 pdfplumber
+pillow
 opencv-python
-Pillow
-numpy
+werkzeug
