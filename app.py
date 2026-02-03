@@ -1,52 +1,117 @@
 from flask import Flask, render_template, request, redirect, session
 from users import USERS
 from pagadurias import PAGADURIAS
-import pytesseract, pdfplumber, re, os
-from PIL import Image
+import os
+import re
+
+# =========================
+# CONFIGURACIÓN BÁSICA
+# =========================
 
 app = Flask(__name__)
-import os
-app.secret_key = os.environ.get("SECRET_KEY")
-UPLOAD_FOLDER = "uploads"
+app.secret_key = os.environ.get("SECRET_KEY", "cde_seguro_2026")
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-def extract_text(file_path):
-    if file_path.endswith(".pdf"):
+# =========================
+# FUNCIONES OCR (CARGA DIFERIDA)
+# =========================
+
+def extract_text(file_path: str) -> str:
+    """
+    Extrae texto desde PDF o imagen (PNG/JPG)
+    usando OCR solo cuando se necesita.
+    """
+    if file_path.lower().endswith(".pdf"):
+        import pdfplumber
+        texto = ""
         with pdfplumber.open(file_path) as pdf:
-            return " ".join(page.extract_text() or "" for page in pdf.pages)
+            for page in pdf.pages:
+                texto += page.extract_text() or ""
+        return texto
     else:
+        import pytesseract
+        from PIL import Image
         img = Image.open(file_path)
         return pytesseract.image_to_string(img)
 
-def parse_data(text):
-    pension = int(re.search(r"\$?\s?([\d\.]+)", text).group(1).replace(".", ""))
+def parse_data(text: str):
+    """
+    Extrae:
+    - Valor pensión
+    - Descuento salud (12%)
+    - Pagaduría
+    """
+    # Buscar número grande (valor pensión)
+    match = re.search(r"([\d\.]{6,})", text)
+    pension = int(match.group(1).replace(".", "")) if match else 0
+
     salud = int(pension * 0.12)
-    pagaduria = next((p for p in PAGADURIAS if p in text.upper()), "NO IDENTIFICADA")
+
+    pagaduria = next(
+        (p for p in PAGADURIAS.keys() if p in text.upper()),
+        "NO IDENTIFICADA"
+    )
+
     return pension, salud, pagaduria
 
-@app.route("/", methods=["GET","POST"])
+# =========================
+# RUTAS
+# =========================
+
+@app.route("/", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        if USERS.get(request.form["user"]) == request.form["password"]:
-            session["user"] = request.form["user"]
+        usuario = request.form.get("user")
+        clave = request.form.get("password")
+
+        if USERS.get(usuario) == clave:
+            session["user"] = usuario
             return redirect("/dashboard")
+
     return render_template("login.html")
 
-@app.route("/dashboard", methods=["GET","POST"])
+@app.route("/dashboard", methods=["GET", "POST"])
 def dashboard():
     if "user" not in session:
         return redirect("/")
+
     data = None
+
     if request.method == "POST":
-        f = request.files["file"]
-        path = os.path.join(UPLOAD_FOLDER, f.filename)
-        f.save(path)
-        text = extract_text(path)
-        pension, salud, pagaduria = parse_data(text)
-        margen = PAGADURIAS.get(pagaduria, {}).get("margen", 0)
-        sector = PAGADURIAS.get(pagaduria, {}).get("sector", "")
-        ingreso = pension - salud
-        cde = (ingreso / 2) - margen
-        data = [pagaduria, pension, salud, ingreso, cde, sector]
+        archivo = request.files.get("file")
+
+        if archivo and archivo.filename:
+            ruta = os.path.join(UPLOAD_FOLDER, archivo.filename)
+            archivo.save(ruta)
+
+            texto = extract_text(ruta)
+            pension, salud, pagaduria = parse_data(texto)
+
+            info_pagaduria = PAGADURIAS.get(pagaduria, {})
+            margen = info_pagaduria.get("margen", 0)
+            sector = info_pagaduria.get("sector", "NO DEFINIDO")
+
+            ingreso_neto = pension - salud
+            resultado = ingreso_neto / 2
+            cde = resultado - margen
+
+            data = {
+                "pagaduria": pagaduria,
+                "pension": pension,
+                "salud": salud,
+                "ingreso_neto": ingreso_neto,
+                "resultado": resultado,
+                "margen": margen,
+                "cde": cde,
+                "sector": sector
+            }
+
     return render_template("dashboard.html", data=data)
 
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/")
