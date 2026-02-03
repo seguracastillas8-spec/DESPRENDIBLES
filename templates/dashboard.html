@@ -1,0 +1,21 @@
+<h2>Subir desprendible</h2>
+<form method="post" enctype="multipart/form-data">
+  <input type="file" name="file">
+  <button>Procesar</button>
+</form>
+
+{% if data %}
+<table border="1">
+<tr>
+<th>PAGADURIA</th><th>PENSIÓN</th><th>SALUD</th><th>INGRESO NETO</th><th>CDE</th><th>SECTOR</th>
+</tr>
+<tr>
+<td>{{data[0]}}</td>
+<td>{{data[1]}}</td>
+<td>{{data[2]}}</td>
+<td>{{data[3]}}</td>
+<td>{{data[4]}}</td>
+<td>{{data[5]}}</td>
+</tr>
+</table>
+{% endif %}
