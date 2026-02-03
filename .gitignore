@@ -1,0 +1,7 @@
+__pycache__/
+.env
+uploads/*
+!uploads/.gitkeep
+*.pdf
+*.png
+*.jpg
