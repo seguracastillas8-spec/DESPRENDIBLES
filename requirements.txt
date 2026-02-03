@@ -1,0 +1,6 @@
+Flask
+pytesseract
+pdfplumber
+opencv-python
+Pillow
+numpy
