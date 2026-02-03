@@ -1,39 +1,52 @@
 from flask import Flask, render_template, request, redirect, session
-import os
-
-from auth import login_required
-from ocr.reader import leer_archivo
-from ocr.extractors import extraer_datos
-from logic.calculations import calcular_cde
+from users import USERS
+from pagadurias import PAGADURIAS
+import pytesseract, pdfplumber, re, os
+from PIL import Image
 
 app = Flask(__name__)
-app.secret_key = "clave-super-privada"
-
+app.secret_key = "clave_super_privada"
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-@app.route("/", methods=["GET", "POST"])
+def extract_text(file_path):
+    if file_path.endswith(".pdf"):
+        with pdfplumber.open(file_path) as pdf:
+            return " ".join(page.extract_text() or "" for page in pdf.pages)
+    else:
+        img = Image.open(file_path)
+        return pytesseract.image_to_string(img)
+
+def parse_data(text):
+    pension = int(re.search(r"\$?\s?([\d\.]+)", text).group(1).replace(".", ""))
+    salud = int(pension * 0.12)
+    pagaduria = next((p for p in PAGADURIAS if p in text.upper()), "NO IDENTIFICADA")
+    return pension, salud, pagaduria
+
+@app.route("/", methods=["GET","POST"])
 def login():
     if request.method == "POST":
-        if request.form["user"] == "admin" and request.form["password"] == "1234":
-            session["user"] = "admin"
-            return redirect("/upload")
+        if USERS.get(request.form["user"]) == request.form["password"]:
+            session["user"] = request.form["user"]
+            return redirect("/dashboard")
     return render_template("login.html")
 
-@app.route("/upload", methods=["GET", "POST"])
-@login_required
-def upload():
+@app.route("/dashboard", methods=["GET","POST"])
+def dashboard():
+    if "user" not in session:
+        return redirect("/")
+    data = None
     if request.method == "POST":
-        archivo = request.files["file"]
-        ruta = os.path.join(UPLOAD_FOLDER, archivo.filename)
-        archivo.save(ruta)
-
-        texto = leer_archivo(ruta)
-        datos = extraer_datos(texto)
-        resultado = calcular_cde(datos)
-
-        return render_template("result.html", **resultado)
-
-    return render_template("upload.html")
+        f = request.files["file"]
+        path = os.path.join(UPLOAD_FOLDER, f.filename)
+        f.save(path)
+        text = extract_text(path)
+        pension, salud, pagaduria = parse_data(text)
+        margen = PAGADURIAS.get(pagaduria, {}).get("margen", 0)
+        sector = PAGADURIAS.get(pagaduria, {}).get("sector", "")
+        ingreso = pension - salud
+        cde = (ingreso / 2) - margen
+        data = [pagaduria, pension, salud, ingreso, cde, sector]
+    return render_template("dashboard.html", data=data)
 
 app.run(debug=True)
