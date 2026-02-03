@@ -20,6 +20,8 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 # =========================
 
 def extract_text(file_path: str) -> str:
+    return ""
+
     """
     Extrae texto desde PDF o imagen (PNG/JPG)
     usando OCR solo cuando se necesita.
