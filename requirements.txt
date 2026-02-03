@@ -3,5 +3,4 @@ gunicorn
 pytesseract
 pdfplumber
 pillow
-opencv-python
 werkzeug
