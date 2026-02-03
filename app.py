@@ -5,7 +5,8 @@ import pytesseract, pdfplumber, re, os
 from PIL import Image
 
 app = Flask(__name__)
-app.secret_key = "clave_super_privada"
+import os
+app.secret_key = os.environ.get("SECRET_KEY")
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
@@ -49,4 +50,3 @@ def dashboard():
         data = [pagaduria, pension, salud, ingreso, cde, sector]
     return render_template("dashboard.html", data=data)
 
-app.run(debug=True)
